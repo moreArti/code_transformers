@@ -164,7 +164,7 @@ elif args.exp_type in {"exp2b_full"}:
     if args.exp_type == "exp2b_ano":
         commands = [command+anovalues for command in commands]
     
-run_command = "python " # if you need to specify additional python options, e. g. set CUDA_VISIBLE_DEVCES or use sbatch/bsub, do it here
+run_command = "CUDA_VISIBLE_DEVICES=3 python3 " # if you need to specify additional python options, e. g. set CUDA_VISIBLE_DEVCES or use sbatch/bsub, do it here
 for command in commands[:args.max_commands]:
     full_command = run_command + com_begin + command + task_opts
     action(full_command)

@@ -141,6 +141,18 @@ class VarmisuseDataset(Dataset):
             target_criteria = ti < len(elems) - 1
         else:
             target_criteria = ti < 1
+#         if self.args.use_bpe:                                                                   #!!!
+#                 # buggy example
+#                 pos_bug_fixes = elems[ti+1].split("_")
+#                 target_pos = [int(pos) for pos in pos_bug_fixes[0].split("|")]
+#                 target_bug = [int(pos) for pos in pos_bug_fixes[1].split("|")]
+#                 target_fixes = [int(pos) for pos in pos_bug_fixes[2].split("|")]
+#             else:
+#                 # non-buggy example
+#                 target_pos = []
+#                 target_bug = []
+#                 target_fixes = []        
+#         else:
         if target_criteria:
             # buggy example
             pos_bug_fixes = elems[ti+1].split("_")
@@ -152,7 +164,7 @@ class VarmisuseDataset(Dataset):
             target_pos = -1
             target_bug = -1
             target_fixes = []
-        if target_pos != -1: # inject bug
+        if target_pos != -1 and target_pos != []: # inject bug                                    !!!
             ex_obj["code"].tokens[target_pos] = ex_obj["code"].tokens[target_bug]
             if len(ex_obj["code"].subtokens):
                 ex_obj["code"].subtokens[target_pos] = \
@@ -171,11 +183,12 @@ class VarmisuseDataset(Dataset):
                                               self.model.src_dict, \
                                               self.args.anonymize)
         
-        vector = vectorize(ex_obj, self.model)
-        vector["scope"] = torch.LongTensor([int(pos) for pos in elems[0].split("_")])
-        vector["target_pos"] = torch.LongTensor([target_pos])
-        vector["target_bug"] = torch.LongTensor([target_bug])
-        vector["target_fixes"] = torch.LongTensor(target_fixes)
+        vector = vectorize(ex_obj, self.model, target_pos, target_bug, target_fixes, [int(pos) for pos in elems[0].split("_")])
+        if not self.args.use_bpe:                                                                  #!!!
+            vector["target_pos"] = torch.LongTensor([target_pos])
+            vector["target_bug"] = torch.LongTensor([target_bug])
+            vector["target_fixes"] = torch.LongTensor(target_fixes)
+            vector["scope"] = torch.LongTensor([int(pos) for pos in elems[0].split("_")])
         return vector
         
     def lengths(self):

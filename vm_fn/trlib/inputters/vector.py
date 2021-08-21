@@ -1,6 +1,7 @@
 import torch
 from trlib.inputters.constants import PAD
 from trlib.utils.tree_utils import generate_positions, get_adj_matrix
+import numpy as np
 
 def pad_subtokens(seq, pad_symb):
     """
@@ -10,7 +11,7 @@ def pad_subtokens(seq, pad_symb):
     seq = [elem+[pad_symb]*(max_len-len(elem)) for elem in seq]
     return seq
 
-def vectorize(ex, model):
+def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, scope=None):                     #!!!!!
     """Vectorize a single example."""
     src_dict = model.src_dict
     tgt_dict = model.tgt_dict
@@ -34,7 +35,6 @@ def vectorize(ex, model):
     vectorized_ex['id'] = code.id
 
     vectorized_ex['code'] = code.text
-    vectorized_ex['code_tokens'] = code.tokens
     vectorized_ex['code_char_rep'] = None
     vectorized_ex['code_type_rep'] = None
     vectorized_ex['code_type2_rep'] = None
@@ -47,10 +47,70 @@ def vectorize(ex, model):
     vectorized_ex["use_tree_pos_enc"] = False
     vectorized_ex["use_ggnn_layers"] = False
     
-    code_vectorized = code.vectorize(word_dict=src_dict,\
-                                     attrname="tokens" if \
-                                     not model.args.sum_over_subtokens\
-                                     else "subtokens")
+    if model.args.use_bpe:                                                        #!!!!!!!
+        vectorized_ex['code_tokens'] = []
+        code_vectorized = []
+        if model.args.use_code_type:
+            vectorized_ex['code_type_rep'] = []
+        if code.mask:
+            vectorized_ex['code_mask_rep'] = []
+            vectorized_ex['use_code_mask'] = True
+        new_target_pos = []
+        new_target_bug = []
+        new_target_fixes = []
+        new_scope = []
+        for i in range(len(code.tokens)):
+            token = code.tokens[i]
+#             if (token == "<emptyvalue>"):
+#                 new_token = [token]
+#             else:
+            new_token = src_dict.tokenize(token)
+            new_size = len(new_token)
+            if (i == target_pos):
+                new_target_pos += [1] * new_size
+            else:
+                new_target_pos += [0] * new_size
+            if (i == target_bug):
+                new_target_bug += [1] * new_size
+            else:
+                new_target_bug += [0] * new_size
+            if (i in target_fixes):
+                new_target_fixes += [1] * new_size
+            else:
+                new_target_fixes += [0] * new_size
+            if (token == "<emptyvalue>"):
+                new_scope += [0] * new_size
+            else:
+                new_scope += [1] * new_size
+            vectorized_ex['code_tokens'] += new_token
+            code_vectorized += next(src_dict.transform([token]))
+            if model.args.use_code_type:
+                vectorized_ex['code_type_rep'] += [type_dict[code.type[i]]] * new_size
+            if code.mask:
+                vectorized_ex['code_mask_rep'] += [code.mask[i]] * new_size
+            
+        if model.args.use_code_type:
+            vectorized_ex['code_type_rep'] = torch.LongTensor(vectorized_ex['code_type_rep'])
+        if code.mask:
+            vectorized_ex['code_mask_rep'] = torch.LongTensor(vectorized_ex['code_mask_rep'])
+        
+        vectorized_ex["target_pos"] = torch.LongTensor(np.where(np.array(new_target_pos) > 0))
+        vectorized_ex["target_bug"] = torch.LongTensor(np.where(np.array(new_target_bug) > 0))
+        vectorized_ex["target_fixes"] = torch.LongTensor(np.where(np.array(new_target_fixes) > 0))
+        vectorized_ex["scope"] = torch.LongTensor(np.where(np.array(new_scope) > 0))
+        
+    else:
+        vectorized_ex['code_tokens'] = code.tokens
+        code_vectorized = code.vectorize(word_dict=src_dict,\
+                                         attrname="tokens" if \
+                                         not model.args.sum_over_subtokens\
+                                         else "subtokens")
+        if model.args.use_code_type:
+            vectorized_ex['code_type_rep'] = torch.LongTensor(code.vectorize(word_dict=type_dict, attrname="type"))
+        if code.mask:
+            vectorized_ex['code_mask_rep'] = torch.LongTensor(code.mask)
+            vectorized_ex['use_code_mask'] = True
+            
     if not model.args.sum_over_subtokens:
         vectorized_ex['code_word_rep'] = torch.LongTensor(code_vectorized)
     else:
@@ -58,13 +118,8 @@ def vectorize(ex, model):
                                                           code_vectorized, PAD))
     if model.args.use_src_char:
         vectorized_ex['code_char_rep'] = torch.LongTensor(code.vectorize(word_dict=src_dict, _type='char'))
-    if model.args.use_code_type:
-        vectorized_ex['code_type_rep'] = torch.LongTensor(code.vectorize(word_dict=type_dict, attrname="type"))
     if model.args.use_code_type2:
         vectorized_ex['code_type2_rep'] = torch.LongTensor(code.vectorize(word_dict=type_dict2, attrname="type2"))
-    if code.mask:
-        vectorized_ex['code_mask_rep'] = torch.LongTensor(code.mask)
-        vectorized_ex['use_code_mask'] = True
     if model.args.use_tree_relative_attn:
         vectorized_ex["use_tree_relative_attn"] = True
         vectorized_ex["code_rel_matrix"] = \

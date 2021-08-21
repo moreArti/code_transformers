@@ -33,6 +33,7 @@ class Transformer(nn.Module):
         self.decoder_fix = nn.Linear(self.embedder.enc_input_size, 1)
         self.nobug_embedding = nn.Parameter(torch.zeros(1))
         self.criterion = nn.CrossEntropyLoss(reduction='none')
+        self.use_bpe = args.use_bpe                                                          #!!!
 
     def get_logits(self, ex):
         batch_size = ex["code_len"].size(0)
@@ -66,8 +67,20 @@ class Transformer(nn.Module):
                               dim=1).bool()
         # batch_size, 1+seq_len
         loc_predictions = loc_predictions.masked_fill(~seq_mask, -1e18)
-        loc_loss = self.criterion(loc_predictions, ex["target_pos"]+1).mean()
+        
+        if self.use_bpe:                                                                         #!!!
+            location_probs = F.softmax(loc_predictions, dim=1) # batch x (seq_len + 1)
+            loc_mask = ex["target_pos"] # batch x (seq_len + 1)
+            loc_probs = (loc_mask * location_probs).sum(dim=-1) # batch
+            if ex["mask_incorrect"].sum() > 0:
+                loc_loss = (ex["mask_incorrect"].float() * (-torch.log(loc_probs + 1e-9))).sum()  / (1e-9 + ex["mask_incorrect"].sum())
+            else:
+                loc_loss = logits[0].new_zeros(1).sum()
+        else:
+            loc_loss = self.criterion(loc_predictions, ex["target_pos"]+1).mean()
+            
         # -1 -> 0, >= 0 -> >=0 + 1
+        
         scope_mask = ex["scope_t"] # batch x seq_len
         pointer_logits = pointer_logits.masked_fill(~scope_mask, -1e18)
         pointer_probs = F.softmax(pointer_logits, dim=1) # batch x seq_len
@@ -136,7 +149,10 @@ class VarmisuseModel:
     def __init__(self, args, src_dict, rel_dict=None, type_dict=None, type_dict2=None, state_dict=None, sparse_params={}):
         self.args = args
         self.src_dict = src_dict
-        self.args.src_vocab_size = len(src_dict)
+        if args.use_bpe:
+            self.args.src_vocab_size = src_dict.vocab_size
+        else:
+            self.args.src_vocab_size = len(src_dict)
         self.tgt_dict = {}
         self.args.tgt_vocab_size = 0
         self.rel_dict = rel_dict

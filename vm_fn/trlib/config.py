@@ -40,7 +40,8 @@ MODEL_ARCHITECTURE = {
     "n_edge_types",
     "n_steps_ggnn",
     "use_self_loops",
-    "ggnn_first"
+    "ggnn_first",
+    "use_bpe"
 }
 
 SEQ2SEQ_ARCHITECTURE = {

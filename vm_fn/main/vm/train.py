@@ -28,6 +28,8 @@ import trlib.inputters.dataset as data
 from model import VarmisuseModel
 import data_utils
 
+from bpe import Encoder
+
 def str2bool(v):
     return v.lower() in ('yes', 'true', 't', '1', 'y')
 
@@ -131,6 +133,9 @@ def add_train_args(parser):
                          help='Only do testing')
     general.add_argument('--use_tqdm', type='bool', default=False,
                          help='Enable fancy training epoch progress printing (useful if you run training in interactive mode, anti-useful if your system saves error log into file')
+    general.add_argument('--use_bpe', type='bool', default=False,
+                         help='Use byte pair encoding')
+    
 
     # Log results Learning
     log = parser.add_argument_group('Log arguments')
@@ -260,18 +265,23 @@ def init_from_scratch(args, logger):
     # Build a dictionary from the data questions + words (train/dev splits)
     logger.print('-' * 100)
     logger.print('Build word dictionary')
-    if args.src_dict_filename is not None:
-        logger.print("Loading dict. from "+args.src_dict_filename)
-        src_dict = util.load_word_and_char_dict(args, args.src_dict_filename, \
-                                                   dict_size=args.src_vocab_size,
-                                                    special_tokens="pad_unk")
+    if args.use_bpe:                                                                      #!!!!
+        src_dict = Encoder(vocab_size=args.src_vocab_size)
+        with open(args.train_src_file) as f:
+            src_dict.fit(f.read().split('\n'))
     else:
-        src_dict = util.build_word_and_char_dict_from_file(
-                                 filenames=[args.train_src_file],
-                                 dict_size=args.src_vocab_size,
-                                 special_tokens="pad_unk",\
-                                 sum_over_subtokens = \
-                                 args.sum_over_subtokens)
+        if args.src_dict_filename is not None:
+            logger.print("Loading dict. from "+args.src_dict_filename)
+            src_dict = util.load_word_and_char_dict(args, args.src_dict_filename, \
+                                                       dict_size=args.src_vocab_size,
+                                                        special_tokens="pad_unk")
+        else:
+            src_dict = util.build_word_and_char_dict_from_file(
+                                     filenames=[args.train_src_file],
+                                     dict_size=args.src_vocab_size,
+                                     special_tokens="pad_unk",\
+                                     sum_over_subtokens = \
+                                     args.sum_over_subtokens)
     if args.anonymize:
         for w in range(args.max_src_len):
             src_dict.add("<var%d>"%w)
@@ -306,8 +316,12 @@ def init_from_scratch(args, logger):
                                  dict_size=None)
     else:
         type_dict2 = None
-    
-    logger.print('Num words in source = %d' % (len(src_dict)))
+    if args.use_bpe:
+        logger.print('Num parametr_words in source = %d' % (src_dict.vocab_size))
+        logger.print('Num word_words in source = %d' % (src_dict.word_vocab_size))
+        logger.print('Num bpe_words in source = %d' % (src_dict.bpe_vocab_size))
+    else:
+        logger.print('Num words in source = %d' % (len(src_dict)))
     if args.use_tree_relative_attn:
         logger.print("Num relations in relative matrix = %d" % (len(rel_dict)))
 
@@ -321,6 +335,8 @@ def init_from_scratch(args, logger):
 # Train loop.
 # ------------------------------------------------------------------------------
 
+
+#изменения внесены в config.py и model.py для 
 
 def train(args, data_loader, model, global_stats, logger):
     """Run through one epoch of model training with the provided data loader."""
@@ -395,19 +411,27 @@ def validate_official(args, data_loader, model, global_stats, logger, mode='dev'
         for idx, ex in enumerate(pbar):
             batch_size = ex['batch_size']
             logits_loc, logits_fix = model.predict(ex)
-            pred_loc = np.argmax(logits_loc.cpu().numpy(), axis=1) - 1
-            pred_fix = np.argmax(logits_fix.cpu().numpy(), axis=1)
+            pred_loc = np.argmax(logits_loc.cpu().numpy(), axis=1) - 1                 
+            pred_fix = np.argmax(logits_fix.cpu().numpy(), axis=1)                     
             scope_mask = ex["scope_t"] # batch x seq_len
-            logits_fix = logits_fix.masked_fill(~scope_mask, -1e18)
-            pointer_probs = F.softmax(logits_fix, dim=1) # batch x seq_len
+
+            logits_loc = logits_loc.masked_fill(~scope_mask, -1e18)                     
+            loc_probs = F.softmax(logits_loc, dim=1) # batch x seq_len +1                   !!!     вероятности позиций с багой 
+            loc_mask = ex["target_pos"] # batch x seq_len + 1
+            loc_probs = (loc_mask * loc_probs).sum(dim=-1) # batch                          !!!     выбираем позици правильных ответов
+            
+            
+            logits_fix = logits_fix.masked_fill(~scope_mask, -1e18)                    
+            pointer_probs = F.softmax(logits_fix, dim=1) # batch x seq_len             
             target_mask = ex["fixes_t"] # batch x seq_len
-            target_probs = (target_mask * pointer_probs).sum(dim=-1) # batch
+            target_probs = (target_mask * pointer_probs).sum(dim=-1) # batch            
             target_fix = ex["target_fix"].cpu().numpy()
             correct_fix = target_fix[np.arange(target_fix.shape[0]), pred_fix]
             if global_pred_loc is None:
-                global_pred_loc = pred_loc
-                global_target_loc = ex["target_pos"].cpu().numpy()
-                global_correct_fix = correct_fix
+                global_loc_probs = loc_probs.cpu().numpy()                                 #!!!
+                global_pred_loc = pred_loc                                             
+                global_target_loc = ex["target_pos"].cpu().numpy()                     
+                global_correct_fix = correct_fix                                       
                 is_buggy = ex["mask_incorrect"].cpu().numpy()
                 global_target_probs = target_probs.cpu().numpy()
             else:
@@ -418,14 +442,24 @@ def validate_official(args, data_loader, model, global_stats, logger, mode='dev'
                 is_buggy = np.hstack((is_buggy, ex["mask_incorrect"].cpu().numpy()))
                 global_target_probs = np.hstack((global_target_probs, \
                                                 target_probs.cpu().numpy()))
+                global_loc_probs = np.hstack((global_loc_probs, \
+                                                loc_probs.cpu().numpy()))
     # Store two metrics: the accuracy at predicting specifically the non-buggy samples correctly (to measure false alarm rate), and the accuracy at detecting the real bugs.
-    loc_correct = (global_pred_loc == global_target_loc)
+    if args.use_bpe:
+        loc_correct = (global_loc_probs >= 0.5)                                            #!!!
+    else:    
+        loc_correct = (global_pred_loc == global_target_loc)
     no_bug_pred_acc = ((1 - is_buggy) * loc_correct).sum() / (1e-9 + (1 - is_buggy).sum()) * 100
     bug_loc_acc = (is_buggy * loc_correct).sum() / (1e-9 + (is_buggy).sum()) * 100
     
     # Version by Hellendoorn et al:
     # To simplify the comparison, accuracy is computed as achieving >= 50% probability for the top guess
     # (as opposed to the slightly more accurate, but hard to compute quickly, greatest probability among distinct variable names).
+    if args.use_bpe:
+        fix_correct2 = (global_pred_loc == global_correct_fix)
+        no_bug_pred_acc = ((1 - is_buggy) * loc_correct).sum() / (1e-9 + (1 - is_buggy).sum()) * 100
+        bug_loc_acc = (is_buggy * loc_correct).sum() / (1e-9 + (is_buggy).sum()) * 100
+    
     fix_correct = (global_target_probs >= 0.5)
     target_fix_acc = (is_buggy * fix_correct).sum() / (1e-9 + (is_buggy).sum()) * 100
     
