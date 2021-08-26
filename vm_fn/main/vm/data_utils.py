@@ -198,18 +198,23 @@ class VarmisuseDataset(Dataset):
 def batchify_varmisuse(list_of_vectors):
     batch = batchify(list_of_vectors)
     batch_size = len(list_of_vectors)
-    pos_t = torch.cat([v["target_pos"] for v in list_of_vectors])
-    bug_t = torch.cat([v["target_bug"] for v in list_of_vectors])
+    #pos_t = torch.cat([v["target_pos"] for v in list_of_vectors])                                !!!
+    #bug_t = torch.cat([v["target_bug"] for v in list_of_vectors])
+    pos_t = torch.zeros(torch.Size(np.array(batch["code_word_rep"].shape[:2]) + np.array([0,1]))).float()
     fixes_t = torch.zeros(batch["code_word_rep"].shape[:2]).float()
     scope_t = torch.zeros(batch["code_word_rep"].shape[:2]).bool()
+    mask_incorrect = []
     for i, v in enumerate(list_of_vectors):
         fixes_t[i][v["target_fixes"]] = 1
         scope_t[i][v["scope"]] = 1
+        pos_t[i][v["target_pos"]] = 1
+        mask_incorrect.append(v["target_pos"] != [-1])
     arange = torch.arange(batch_size)
-    mask_incorrect = pos_t != -1
-    target_pos = pos_t*mask_incorrect.long() + (-1)*(1-mask_incorrect.long())
+    mask_incorrect = torch.tensor(mask_incorrect)
+    #mask_incorrect = pos_t != -1
+    #target_pos = pos_t*mask_incorrect.long() + (-1)*(1-mask_incorrect.long())
     batch["mask_incorrect"] = mask_incorrect
-    batch["target_pos"] = target_pos
+    batch["target_pos"] = pos_t
     batch["target_fix"] = fixes_t
     batch["fixes_t"] = fixes_t
     batch["scope_t"] = scope_t
