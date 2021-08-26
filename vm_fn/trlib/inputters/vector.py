@@ -59,12 +59,14 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
         new_target_bug = []
         new_target_fixes = []
         new_scope = []
+        new_tokens = []
         for i in range(len(code.tokens)):
             token = code.tokens[i]
 #             if (token == "<emptyvalue>"):
 #                 new_token = [token]
 #             else:
             new_token = src_dict.tokenize(token)
+            new_tokens += new_token
             new_size = len(new_token)
             if (i == target_pos):
                 new_target_pos += [1] * new_size
@@ -110,7 +112,8 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
         if code.mask:
             vectorized_ex['code_mask_rep'] = torch.LongTensor(code.mask)
             vectorized_ex['use_code_mask'] = True
-            
+    print(len(code.tokens), "vs", len(vectorized_ex['code_tokens']))
+    print(code.tokens, "vs", new_tokens)        
     if not model.args.sum_over_subtokens:
         vectorized_ex['code_word_rep'] = torch.LongTensor(code_vectorized)
     else:

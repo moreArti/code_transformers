@@ -29,6 +29,7 @@ from model import VarmisuseModel
 import data_utils
 
 from bpe import Encoder
+import re
 
 def str2bool(v):
     return v.lower() in ('yes', 'true', 't', '1', 'y')
@@ -268,7 +269,8 @@ def init_from_scratch(args, logger):
     if args.use_bpe:                                                                      #!!!!
         src_dict = Encoder(vocab_size=args.src_vocab_size)
         with open(args.train_src_file) as f:
-            src_dict.fit(f.read().split('\n'))
+            src_dict.fit(re.split(" |\n", f.read()))
+        print(src_dict.word_vocab)
     else:
         if args.src_dict_filename is not None:
             logger.print("Loading dict. from "+args.src_dict_filename)
