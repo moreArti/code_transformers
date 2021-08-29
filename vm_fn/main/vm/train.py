@@ -29,6 +29,9 @@ from model import VarmisuseModel
 import data_utils
 
 from bpe import Encoder
+from tokenizers import Tokenizer
+from tokenizers.models import BPE
+from tokenizers.trainers import BpeTrainer
 import re
 
 def str2bool(v):
@@ -267,10 +270,12 @@ def init_from_scratch(args, logger):
     logger.print('-' * 100)
     logger.print('Build word dictionary')
     if args.use_bpe:                                                                      #!!!!
-        src_dict = Encoder(vocab_size=args.src_vocab_size)
-        with open(args.train_src_file) as f:
-            src_dict.fit(re.split(" |\n", f.read()))
-        print(src_dict.word_vocab)
+#         src_dict = Encoder(vocab_size=args.src_vocab_size)
+#         with open(args.train_src_file) as f:
+#             src_dict.fit(re.split(" |\n", f.read()))
+        src_dict = Tokenizer(BPE())
+        trainer = BpeTrainer(vocab_size=args.src_vocab_size, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
+        src_dict.train(files=[args.train_src_file], trainer=trainer)
     else:
         if args.src_dict_filename is not None:
             logger.print("Loading dict. from "+args.src_dict_filename)
@@ -319,9 +324,10 @@ def init_from_scratch(args, logger):
     else:
         type_dict2 = None
     if args.use_bpe:
-        logger.print('Num parametr_words in source = %d' % (src_dict.vocab_size))
-        logger.print('Num word_words in source = %d' % (src_dict.word_vocab_size))
-        logger.print('Num bpe_words in source = %d' % (src_dict.bpe_vocab_size))
+        logger.print('Num bpe_words in source = %d' % (src_dict.get_vocab_size()))
+#         logger.print('Num parametr_words in source = %d' % (src_dict.vocab_size))
+#         logger.print('Num word_words in source = %d' % (src_dict.word_vocab_size))
+#         logger.print('Num bpe_words in source = %d' % (src_dict.bpe_vocab_size))
     else:
         logger.print('Num words in source = %d' % (len(src_dict)))
     if args.use_tree_relative_attn:

@@ -62,10 +62,12 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
         new_tokens = []
         for i in range(len(code.tokens)):
             token = code.tokens[i]
-#             if (token == "<emptyvalue>"):
-#                 new_token = [token]
-#             else:
-            new_token = src_dict.tokenize(token)
+            temp_structure = src_dict.encode(token)
+            if (token == "<emptyvalue>"):
+                new_token = [token]
+            else:
+                new_token = temp_structure.tokens
+#             new_token = src_dict.tokenize(token)
             new_tokens += new_token
             new_size = len(new_token)
             if (i == target_pos):
@@ -85,7 +87,11 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
             else:
                 new_scope += [1] * new_size
             vectorized_ex['code_tokens'] += new_token
-            code_vectorized += next(src_dict.transform([token]))
+#             code_vectorized += next(src_dict.transform([token]))
+            if (token == "<emptyvalue>"):
+                code_vectorized += [86]
+            else:
+                code_vectorized += temp_structure.ids
             if model.args.use_code_type:
                 vectorized_ex['code_type_rep'] += [type_dict[code.type[i]]] * new_size
             if code.mask:
@@ -112,8 +118,11 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
         if code.mask:
             vectorized_ex['code_mask_rep'] = torch.LongTensor(code.mask)
             vectorized_ex['use_code_mask'] = True
-    print(len(code.tokens), "vs", len(vectorized_ex['code_tokens']))
-    print(code.tokens, "vs", new_tokens)        
+    rere = open('text.txt', 'a')
+    rere.write(str(len(code.tokens)) + " " + str(len(vectorized_ex['code_tokens'])) + "\n")
+    rere.close()
+#     print(len(code.tokens), "vs", len(vectorized_ex['code_tokens']), "vs", len(code_vectorized) )
+#     print(code.tokens, "-" * 20, new_tokens, "-" * 20, code_vectorized)        
     if not model.args.sum_over_subtokens:
         vectorized_ex['code_word_rep'] = torch.LongTensor(code_vectorized)
     else:

@@ -165,6 +165,12 @@ class VarmisuseDataset(Dataset):
             target_bug = -1
             target_fixes = []
         if target_pos != -1 and target_pos != []: # inject bug                                    !!!
+            print(len(ex_obj["code"].tokens))
+            print(target_pos)
+            print(target_bug, "-----")
+            print(ex_obj["code"].tokens,"-----")
+            print(ex_obj["code"].tokens[target_pos])
+            print(ex_obj["code"].tokens[target_bug])
             ex_obj["code"].tokens[target_pos] = ex_obj["code"].tokens[target_bug]
             if len(ex_obj["code"].subtokens):
                 ex_obj["code"].subtokens[target_pos] = \

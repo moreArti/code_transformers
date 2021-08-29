@@ -150,7 +150,8 @@ class VarmisuseModel:
         self.args = args
         self.src_dict = src_dict
         if args.use_bpe:
-            self.args.src_vocab_size = src_dict.vocab_size
+#             self.args.src_vocab_size = src_dict.vocab_size
+            self.args.src_vocab_size = src_dict.get_vocab_size()
         else:
             self.args.src_vocab_size = len(src_dict)
         self.tgt_dict = {}
