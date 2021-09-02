@@ -70,26 +70,31 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
 #             new_token = src_dict.tokenize(token)
             new_tokens += new_token
             new_size = len(new_token)
+        
             if (i == target_pos):
                 new_target_pos += [1] * new_size
             else:
                 new_target_pos += [0] * new_size
+                
             if (i == target_bug):
                 new_target_bug += [1] * new_size
             else:
                 new_target_bug += [0] * new_size
+                
             if (i in target_fixes):
                 new_target_fixes += [1] * new_size
             else:
                 new_target_fixes += [0] * new_size
-            if (token == "<emptyvalue>"):
-                new_scope += [0] * new_size
-            else:
+                
+            if (i in scope):
                 new_scope += [1] * new_size
+            else:
+                new_scope += [0] * new_size
+                
             vectorized_ex['code_tokens'] += new_token
 #             code_vectorized += next(src_dict.transform([token]))
             if (token == "<emptyvalue>"):
-                code_vectorized += [86]
+                code_vectorized += [temp_structure.ids[0]]
             else:
                 code_vectorized += temp_structure.ids
             if model.args.use_code_type:
@@ -101,11 +106,18 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
             vectorized_ex['code_type_rep'] = torch.LongTensor(vectorized_ex['code_type_rep'])
         if code.mask:
             vectorized_ex['code_mask_rep'] = torch.LongTensor(vectorized_ex['code_mask_rep'])
-        
-        vectorized_ex["target_pos"] = torch.LongTensor(np.where(np.array(new_target_pos) > 0))
-        vectorized_ex["target_bug"] = torch.LongTensor(np.where(np.array(new_target_bug) > 0))
-        vectorized_ex["target_fixes"] = torch.LongTensor(np.where(np.array(new_target_fixes) > 0))
-        vectorized_ex["scope"] = torch.LongTensor(np.where(np.array(new_scope) > 0))
+            
+        if target_pos == [-1]:
+            vectorized_ex["target_pos"] = torch.LongTensor([0])
+        else:
+            vectorized_ex["target_pos"] = torch.LongTensor(np.where(np.array(new_target_pos) > 0)[0]) + 1
+            
+        if target_bug == [-1]:
+            vectorized_ex["target_bug"] = torch.LongTensor([0])
+        else:
+            vectorized_ex["target_bug"] = torch.LongTensor(np.where(np.array(new_target_bug) > 0)[0])      
+        vectorized_ex["target_fixes"] = torch.LongTensor(np.where(np.array(new_target_fixes) > 0)[0])
+        vectorized_ex["scope"] = torch.LongTensor(np.where(np.array(new_scope) > 0)[0])
         
     else:
         vectorized_ex['code_tokens'] = code.tokens

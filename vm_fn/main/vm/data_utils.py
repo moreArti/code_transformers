@@ -165,12 +165,12 @@ class VarmisuseDataset(Dataset):
             target_bug = -1
             target_fixes = []
         if target_pos != -1 and target_pos != []: # inject bug                                    !!!
-            print(len(ex_obj["code"].tokens))
-            print(target_pos)
-            print(target_bug, "-----")
-            print(ex_obj["code"].tokens,"-----")
-            print(ex_obj["code"].tokens[target_pos])
-            print(ex_obj["code"].tokens[target_bug])
+#             print(len(ex_obj["code"].tokens))
+#             print(target_pos)
+#             print(target_bug, "-----")
+#             print(ex_obj["code"].tokens,"-----")
+#             print(ex_obj["code"].tokens[target_pos])
+#             print(ex_obj["code"].tokens[target_bug])
             ex_obj["code"].tokens[target_pos] = ex_obj["code"].tokens[target_bug]
             if len(ex_obj["code"].subtokens):
                 ex_obj["code"].subtokens[target_pos] = \
@@ -207,14 +207,16 @@ def batchify_varmisuse(list_of_vectors):
     #pos_t = torch.cat([v["target_pos"] for v in list_of_vectors])                                !!!
     #bug_t = torch.cat([v["target_bug"] for v in list_of_vectors])
     pos_t = torch.zeros(torch.Size(np.array(batch["code_word_rep"].shape[:2]) + np.array([0,1]))).float()
+    scope2_t = torch.zeros(torch.Size(np.array(batch["code_word_rep"].shape[:2]) + np.array([0,1]))).bool()
     fixes_t = torch.zeros(batch["code_word_rep"].shape[:2]).float()
     scope_t = torch.zeros(batch["code_word_rep"].shape[:2]).bool()
     mask_incorrect = []
     for i, v in enumerate(list_of_vectors):
         fixes_t[i][v["target_fixes"]] = 1
         scope_t[i][v["scope"]] = 1
+        scope2_t[i][v["scope"] + 1] = 1
         pos_t[i][v["target_pos"]] = 1
-        mask_incorrect.append(v["target_pos"] != [-1])
+        mask_incorrect.append(v["target_pos"] != torch.LongTensor([0]))
     arange = torch.arange(batch_size)
     mask_incorrect = torch.tensor(mask_incorrect)
     #mask_incorrect = pos_t != -1
@@ -224,5 +226,6 @@ def batchify_varmisuse(list_of_vectors):
     batch["target_fix"] = fixes_t
     batch["fixes_t"] = fixes_t
     batch["scope_t"] = scope_t
+    batch["scope2_t"] = scope2_t
     return batch
 

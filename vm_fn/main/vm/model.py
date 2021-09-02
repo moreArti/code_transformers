@@ -72,10 +72,7 @@ class Transformer(nn.Module):
             location_probs = F.softmax(loc_predictions, dim=1) # batch x (seq_len + 1)
             loc_mask = ex["target_pos"] # batch x (seq_len + 1)
             loc_probs = (loc_mask * location_probs).sum(dim=-1) # batch
-            if ex["mask_incorrect"].sum() > 0:
-                loc_loss = (ex["mask_incorrect"].float() * (-torch.log(loc_probs + 1e-9))).sum()  / (1e-9 + ex["mask_incorrect"].sum())
-            else:
-                loc_loss = logits[0].new_zeros(1).sum()
+            loc_loss = (-torch.log(loc_probs + 1e-9)).mean()
         else:
             loc_loss = self.criterion(loc_predictions, ex["target_pos"]+1).mean()
             

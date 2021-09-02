@@ -422,8 +422,9 @@ def validate_official(args, data_loader, model, global_stats, logger, mode='dev'
             pred_loc = np.argmax(logits_loc.cpu().numpy(), axis=1) - 1                 
             pred_fix = np.argmax(logits_fix.cpu().numpy(), axis=1)                     
             scope_mask = ex["scope_t"] # batch x seq_len
+            scope2_mask = ex["scope2_t"] # batch x seq_len
 
-            logits_loc = logits_loc.masked_fill(~scope_mask, -1e18)                     
+            logits_loc = logits_loc.masked_fill(~scope2_mask, -1e18)                     
             loc_probs = F.softmax(logits_loc, dim=1) # batch x seq_len +1                   !!!     вероятности позиций с багой 
             loc_mask = ex["target_pos"] # batch x seq_len + 1
             loc_probs = (loc_mask * loc_probs).sum(dim=-1) # batch                          !!!     выбираем позици правильных ответов
@@ -443,15 +444,16 @@ def validate_official(args, data_loader, model, global_stats, logger, mode='dev'
                 is_buggy = ex["mask_incorrect"].cpu().numpy()
                 global_target_probs = target_probs.cpu().numpy()
             else:
-                global_pred_loc = np.hstack((global_pred_loc, pred_loc))
-                global_target_loc = np.hstack((global_target_loc,\
-                                               ex["target_pos"].cpu().numpy()))
-                global_correct_fix = np.hstack((global_correct_fix, correct_fix))
-                is_buggy = np.hstack((is_buggy, ex["mask_incorrect"].cpu().numpy()))
-                global_target_probs = np.hstack((global_target_probs, \
-                                                target_probs.cpu().numpy()))
-                global_loc_probs = np.hstack((global_loc_probs, \
-                                                loc_probs.cpu().numpy()))
+                if batch_size == args.test_batch_size:
+                    global_pred_loc = np.hstack((global_pred_loc, pred_loc))
+                    global_target_loc = np.hstack((global_target_loc,\
+                                                   ex["target_pos"].cpu().numpy()))
+                    global_correct_fix = np.hstack((global_correct_fix, correct_fix))
+                    is_buggy = np.hstack((is_buggy, ex["mask_incorrect"].cpu().numpy()))
+                    global_target_probs = np.hstack((global_target_probs, \
+                                                    target_probs.cpu().numpy()))
+                    global_loc_probs = np.hstack((global_loc_probs, \
+                                                    loc_probs.cpu().numpy()))
     # Store two metrics: the accuracy at predicting specifically the non-buggy samples correctly (to measure false alarm rate), and the accuracy at detecting the real bugs.
     if args.use_bpe:
         loc_correct = (global_loc_probs >= 0.5)                                            #!!!
