@@ -74,7 +74,7 @@ class Transformer(nn.Module):
             loc_probs = (loc_mask * location_probs).sum(dim=-1) # batch
             loc_loss = (-torch.log(loc_probs + 1e-9)).mean()
         else:
-            loc_loss = self.criterion(loc_predictions, ex["target_pos"]+1).mean()
+            loc_loss = self.criterion(loc_predictions, torch.argmax(ex["target_pos"],dim=1)).mean()
             
         # -1 -> 0, >= 0 -> >=0 + 1
         

@@ -191,7 +191,7 @@ class VarmisuseDataset(Dataset):
         
         vector = vectorize(ex_obj, self.model, target_pos, target_bug, target_fixes, [int(pos) for pos in elems[0].split("_")])
         if not self.args.use_bpe:                                                                  #!!!
-            vector["target_pos"] = torch.LongTensor([target_pos])
+            vector["target_pos"] = torch.LongTensor([target_pos]) + 1
             vector["target_bug"] = torch.LongTensor([target_bug])
             vector["target_fixes"] = torch.LongTensor(target_fixes)
             vector["scope"] = torch.LongTensor([int(pos) for pos in elems[0].split("_")])
@@ -208,6 +208,7 @@ def batchify_varmisuse(list_of_vectors):
     #bug_t = torch.cat([v["target_bug"] for v in list_of_vectors])
     pos_t = torch.zeros(torch.Size(np.array(batch["code_word_rep"].shape[:2]) + np.array([0,1]))).float()
     scope2_t = torch.zeros(torch.Size(np.array(batch["code_word_rep"].shape[:2]) + np.array([0,1]))).bool()
+    scope2_t.T[0] = 1
     fixes_t = torch.zeros(batch["code_word_rep"].shape[:2]).float()
     scope_t = torch.zeros(batch["code_word_rep"].shape[:2]).bool()
     mask_incorrect = []
@@ -216,7 +217,7 @@ def batchify_varmisuse(list_of_vectors):
         scope_t[i][v["scope"]] = 1
         scope2_t[i][v["scope"] + 1] = 1
         pos_t[i][v["target_pos"]] = 1
-        mask_incorrect.append(v["target_pos"] != torch.LongTensor([0]))
+        mask_incorrect.append(list(v["target_pos"]) != [0])
     arange = torch.arange(batch_size)
     mask_incorrect = torch.tensor(mask_incorrect)
     #mask_incorrect = pos_t != -1

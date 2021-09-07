@@ -419,7 +419,7 @@ def validate_official(args, data_loader, model, global_stats, logger, mode='dev'
         for idx, ex in enumerate(pbar):
             batch_size = ex['batch_size']
             logits_loc, logits_fix = model.predict(ex)
-            pred_loc = np.argmax(logits_loc.cpu().numpy(), axis=1) - 1                 
+            pred_loc = np.argmax(logits_loc.cpu().numpy(), axis=1)                 
             pred_fix = np.argmax(logits_fix.cpu().numpy(), axis=1)                     
             scope_mask = ex["scope_t"] # batch x seq_len
             scope2_mask = ex["scope2_t"] # batch x seq_len
@@ -436,10 +436,11 @@ def validate_official(args, data_loader, model, global_stats, logger, mode='dev'
             target_probs = (target_mask * pointer_probs).sum(dim=-1) # batch            
             target_fix = ex["target_fix"].cpu().numpy()
             correct_fix = target_fix[np.arange(target_fix.shape[0]), pred_fix]
+#             print(np.argmax(ex["target_pos"].cpu().numpy(), axis=1), pred_loc, np.argmax(ex["target_pos"].cpu().numpy(), axis=1) == pred_loc, ex["mask_incorrect"].cpu().numpy() )
             if global_pred_loc is None:
                 global_loc_probs = loc_probs.cpu().numpy()                                 #!!!
                 global_pred_loc = pred_loc                                             
-                global_target_loc = ex["target_pos"].cpu().numpy()                     
+                global_target_loc = np.argmax(ex["target_pos"].cpu().numpy() , axis=1)                     
                 global_correct_fix = correct_fix                                       
                 is_buggy = ex["mask_incorrect"].cpu().numpy()
                 global_target_probs = target_probs.cpu().numpy()
@@ -447,7 +448,7 @@ def validate_official(args, data_loader, model, global_stats, logger, mode='dev'
                 if batch_size == args.test_batch_size:
                     global_pred_loc = np.hstack((global_pred_loc, pred_loc))
                     global_target_loc = np.hstack((global_target_loc,\
-                                                   ex["target_pos"].cpu().numpy()))
+                                                   np.argmax(ex["target_pos"].cpu().numpy() , axis=1)))
                     global_correct_fix = np.hstack((global_correct_fix, correct_fix))
                     is_buggy = np.hstack((is_buggy, ex["mask_incorrect"].cpu().numpy()))
                     global_target_probs = np.hstack((global_target_probs, \
@@ -456,19 +457,19 @@ def validate_official(args, data_loader, model, global_stats, logger, mode='dev'
                                                     loc_probs.cpu().numpy()))
     # Store two metrics: the accuracy at predicting specifically the non-buggy samples correctly (to measure false alarm rate), and the accuracy at detecting the real bugs.
     if args.use_bpe:
-        loc_correct = (global_loc_probs >= 0.5)                                            #!!!
-    else:    
-        loc_correct = (global_pred_loc == global_target_loc)
+        loc_correct = global_loc_probs >= 0.5                                            #!!!
+    else:
+        loc_correct = global_pred_loc == global_target_loc
     no_bug_pred_acc = ((1 - is_buggy) * loc_correct).sum() / (1e-9 + (1 - is_buggy).sum()) * 100
     bug_loc_acc = (is_buggy * loc_correct).sum() / (1e-9 + (is_buggy).sum()) * 100
     
     # Version by Hellendoorn et al:
     # To simplify the comparison, accuracy is computed as achieving >= 50% probability for the top guess
     # (as opposed to the slightly more accurate, but hard to compute quickly, greatest probability among distinct variable names).
-    if args.use_bpe:
-        fix_correct2 = (global_pred_loc == global_correct_fix)
-        no_bug_pred_acc = ((1 - is_buggy) * loc_correct).sum() / (1e-9 + (1 - is_buggy).sum()) * 100
-        bug_loc_acc = (is_buggy * loc_correct).sum() / (1e-9 + (is_buggy).sum()) * 100
+#     if args.use_bpe:
+#         fix_correct2 = (global_pred_loc == global_correct_fix)
+#         no_bug_pred_acc = ((1 - is_buggy) * loc_correct).sum() / (1e-9 + (1 - is_buggy).sum()) * 100
+#         bug_loc_acc = (is_buggy * loc_correct).sum() / (1e-9 + (is_buggy).sum()) * 100
     
     fix_correct = (global_target_probs >= 0.5)
     target_fix_acc = (is_buggy * fix_correct).sum() / (1e-9 + (is_buggy).sum()) * 100
