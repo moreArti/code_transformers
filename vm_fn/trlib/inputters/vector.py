@@ -107,12 +107,12 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
         if code.mask:
             vectorized_ex['code_mask_rep'] = torch.LongTensor(vectorized_ex['code_mask_rep'])
             
-        if target_pos == [-1]:
+        if target_pos == -1:
             vectorized_ex["target_pos"] = torch.LongTensor([0])
         else:
             vectorized_ex["target_pos"] = torch.LongTensor(np.where(np.array(new_target_pos) > 0)[0]) + 1
             
-        if target_bug == [-1]:
+        if target_bug == -1:
             vectorized_ex["target_bug"] = torch.LongTensor([0])
         else:
             vectorized_ex["target_bug"] = torch.LongTensor(np.where(np.array(new_target_bug) > 0)[0])      
@@ -130,9 +130,14 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
         if code.mask:
             vectorized_ex['code_mask_rep'] = torch.LongTensor(code.mask)
             vectorized_ex['use_code_mask'] = True
-    rere = open('text.txt', 'a')
-    rere.write(str(len(code.tokens)) + " " + str(len(vectorized_ex['code_tokens'])) + "\n")
-    rere.close()
+#     rere = open('text.txt', 'a')
+#     rere.write(str(len(code.tokens)) + " " + str(len(vectorized_ex['code_tokens'])) + "\n")
+#     rere.write(str(code.tokens) + "\n")
+#     rere.write(str(new_tokens) + "\n")
+#     rere.write(str(target_pos) + " " + str(target_bug) + " " + str(target_fixes) + " " + str(scope) + "\n")
+#     rere.write(str(vectorized_ex["target_pos"]) + " " + str(vectorized_ex["target_bug"]) + " " + str(vectorized_ex["target_fixes"]) + " " + str(vectorized_ex["scope"]) + "\n")
+    
+#     rere.close()
 #     print(len(code.tokens), "vs", len(vectorized_ex['code_tokens']), "vs", len(code_vectorized) )
 #     print(code.tokens, "-" * 20, new_tokens, "-" * 20, code_vectorized)        
     if not model.args.sum_over_subtokens:
