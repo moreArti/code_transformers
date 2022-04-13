@@ -190,7 +190,7 @@ class VarmisuseDataset(Dataset):
                                               self.args.anonymize)
         
         vector = vectorize(ex_obj, self.model, target_pos, target_bug, target_fixes, [int(pos) for pos in elems[0].split("_")])
-        if not self.args.use_bpe:                                                                  #!!!
+        if not (self.args.use_bpe or self.args.use_ulm):                                                                  #!!!
             vector["target_pos"] = torch.LongTensor([target_pos]) + 1
             vector["target_bug"] = torch.LongTensor([target_bug])
             vector["target_fixes"] = torch.LongTensor(target_fixes)
