@@ -41,7 +41,9 @@ MODEL_ARCHITECTURE = {
     "n_steps_ggnn",
     "use_self_loops",
     "ggnn_first",
-    "use_bpe"
+    "max_tokenized_len",
+    "use_bpe",
+    "use_ulm"
 }
 
 SEQ2SEQ_ARCHITECTURE = {
@@ -74,7 +76,8 @@ DATA_OPTIONS = {
     'use_code_type2',
     'uncase',
     'max_characters_per_token',
-    'dataset_weights'
+    'dataset_weights',
+    'pre_tokenizer'
 }
 
 # Index of arguments concerning the model optimizer/training
