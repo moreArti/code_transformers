@@ -29,9 +29,10 @@ from model import VarmisuseModel
 import data_utils
 
 from bpe import Encoder
-from tokenizers import Tokenizer
-from tokenizers.models import BPE
-from tokenizers.trainers import BpeTrainer
+from tokenizers import Tokenizer, Regex
+from tokenizers.models import BPE, Unigram
+from tokenizers.trainers import BpeTrainer, UnigramTrainer
+import tokenizers.pre_tokenizers as pretoken
 import re
 
 def str2bool(v):
@@ -120,8 +121,12 @@ def add_train_args(parser):
     preprocess = parser.add_argument_group('Preprocessing')
     preprocess.add_argument('--src_vocab_size', type=int, default=50000,
                             help='Maximum allowed length for src dictionary')
+    preprocess.add_argument('--max_tokenized_len', type=int, default=500,
+                            help='Maximum allowed length for tokenized sentence')
     preprocess.add_argument('--anonymize', type=str, default=None,
                       help='If not None, rare tokens will be anonymized. Options: "freq" or "order"')
+    preprocess.add_argument('--pre_tokenizer', type=str, default="whitespace",
+                      help='which pre_tokenizer will be used before tokenizetions')
 
     # General
     general = parser.add_argument_group('General')
@@ -139,6 +144,8 @@ def add_train_args(parser):
                          help='Enable fancy training epoch progress printing (useful if you run training in interactive mode, anti-useful if your system saves error log into file')
     general.add_argument('--use_bpe', type='bool', default=False,
                          help='Use byte pair encoding')
+    general.add_argument('--use_ulm', type='bool', default=False,
+                         help='Use unigram language model')
     
 
     # Log results Learning
@@ -269,13 +276,37 @@ def init_from_scratch(args, logger):
     # Build a dictionary from the data questions + words (train/dev splits)
     logger.print('-' * 100)
     logger.print('Build word dictionary')
+    
+    pre_tokenizer = [pretoken.WhitespaceSplit()]
+    pre_tokenizer_flags = args.pre_tokenizers.split("_")
+    if "dots" in pre_tokenizer_flags:
+        pre_tokenizer.append(pretoken.Split(".", "merged_with_previous"))
+    if "snake" in pre_tokenizer_flags:
+        pre_tokenizer.append(pretoken.Split("_", "merged_with_previous"))
+    if "camel" in pre_tokenizer_flags:
+        pre_tokenizer.append(pretoken.Split(tokenizers.Regex(".+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)"), "merged_with_previous"))
+    pre_tokenizer = pretoken.Sequence(pre_tokenizer)     
+    
     if args.use_bpe:                                                                      #!!!!
-#         src_dict = Encoder(vocab_size=args.src_vocab_size)
-#         with open(args.train_src_file) as f:
-#             src_dict.fit(re.split(" |\n", f.read()))
-        src_dict = Tokenizer(BPE())
-        trainer = BpeTrainer(vocab_size=args.src_vocab_size, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
-        src_dict.train(files=[args.train_src_file], trainer=trainer)
+        if args.src_dict_filename is not None:
+            logger.print("Loading dict. from "+ args.src_dict_filename)
+            src_dict = Tokenizer.from_file(args.src_dict_filename)
+        else:
+            src_dict = Tokenizer(BPE())
+            src_dict.pre_tokenizer = pre_tokenizer
+            trainer = BpeTrainer(vocab_size=args.src_vocab_size, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
+            src_dict.train(files=[args.train_src_file], trainer=trainer)
+            src_dict.save(f'vocabularies/bpe_{args.src_vocab_size}_{args.dataset_name}.json')
+    elif args.use_ulm:                                                                      #!!!!
+        if args.src_dict_filename is not None:
+            logger.print("Loading dict. from "+ args.src_dict_filename)
+            src_dict = Tokenizer.from_file(args.src_dict_filename)
+        else:
+            src_dict = Tokenizer(Unigram())
+            src_dict.pre_tokenizer = pre_tokenizer
+            trainer = UnigramTrainer(vocab_size=args.src_vocab_size, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
+            src_dict.train(files=[args.train_src_file], trainer=trainer)
+            src_dict.save(f'vocabularies/ulm_{args.src_vocab_size}_{args.dataset_name}.json')
     else:
         if args.src_dict_filename is not None:
             logger.print("Loading dict. from "+args.src_dict_filename)
@@ -328,6 +359,8 @@ def init_from_scratch(args, logger):
 #         logger.print('Num parametr_words in source = %d' % (src_dict.vocab_size))
 #         logger.print('Num word_words in source = %d' % (src_dict.word_vocab_size))
 #         logger.print('Num bpe_words in source = %d' % (src_dict.bpe_vocab_size))
+    elif args.use_ulm:
+        logger.print('Num ulm_words in source = %d' % (src_dict.get_vocab_size()))
     else:
         logger.print('Num words in source = %d' % (len(src_dict)))
     if args.use_tree_relative_attn:
@@ -456,7 +489,7 @@ def validate_official(args, data_loader, model, global_stats, logger, mode='dev'
                     global_loc_probs = np.hstack((global_loc_probs, \
                                                     loc_probs.cpu().numpy()))
     # Store two metrics: the accuracy at predicting specifically the non-buggy samples correctly (to measure false alarm rate), and the accuracy at detecting the real bugs.
-    if args.use_bpe:
+    if args.use_bpe or args.use_ulm:
         loc_correct = global_loc_probs >= 0.5                                            #!!!
     else:
         loc_correct = global_pred_loc == global_target_loc
@@ -595,6 +628,11 @@ def main(args, logger):
         pin_memory=args.cuda,
         drop_last=args.parallel
     )
+#     logger.print('Make gistogram')
+#     with open('gist_ulm.txt', 'w') as file:
+#         for x in train_loader:
+#             file.write(str(len(x["code_text"][0].split())) + " " + str(len(x['code_tokens'][0])) + "\n")
+#     return
 
     # -------------------------------------------------------------------------
     # PRINT CONFIG
