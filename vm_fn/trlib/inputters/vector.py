@@ -47,7 +47,7 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
     vectorized_ex["use_tree_pos_enc"] = False
     vectorized_ex["use_ggnn_layers"] = False
     
-    if model.args.use_bpe:                                                        #!!!!!!!
+    if model.args.use_bpe or model.args.use_ulm:                                                        #!!!!!!!
         vectorized_ex['code_tokens'] = []
         code_vectorized = []
         if model.args.use_code_type:
@@ -68,8 +68,11 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
             else:
                 new_token = temp_structure.tokens
 #             new_token = src_dict.tokenize(token)
-            new_tokens += new_token
             new_size = len(new_token)
+            if len(new_tokens) + new_size > model.args.max_tokenized_len:
+                break
+            new_tokens += new_token
+
         
             if (i == target_pos):
                 new_target_pos += [1] * new_size
