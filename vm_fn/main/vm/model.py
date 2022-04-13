@@ -34,6 +34,7 @@ class Transformer(nn.Module):
         self.nobug_embedding = nn.Parameter(torch.zeros(1))
         self.criterion = nn.CrossEntropyLoss(reduction='none')
         self.use_bpe = args.use_bpe                                                          #!!!
+        self.use_ulm = args.use_ulm
 
     def get_logits(self, ex):
         batch_size = ex["code_len"].size(0)
@@ -68,7 +69,7 @@ class Transformer(nn.Module):
         # batch_size, 1+seq_len
         loc_predictions = loc_predictions.masked_fill(~seq_mask, -1e18)
         
-        if self.use_bpe:                                                                         #!!!
+        if self.use_bpe or self.use_ulm:                                                                         #!!!
             location_probs = F.softmax(loc_predictions, dim=1) # batch x (seq_len + 1)
             loc_mask = ex["target_pos"] # batch x (seq_len + 1)
             loc_probs = (loc_mask * location_probs).sum(dim=-1) # batch
@@ -146,7 +147,7 @@ class VarmisuseModel:
     def __init__(self, args, src_dict, rel_dict=None, type_dict=None, type_dict2=None, state_dict=None, sparse_params={}):
         self.args = args
         self.src_dict = src_dict
-        if args.use_bpe:
+        if args.use_bpe or args.use_ulm:
 #             self.args.src_vocab_size = src_dict.vocab_size
             self.args.src_vocab_size = src_dict.get_vocab_size()
         else:
