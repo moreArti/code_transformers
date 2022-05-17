@@ -11,6 +11,37 @@ def pad_subtokens(seq, pad_symb):
     seq = [elem+[pad_symb]*(max_len-len(elem)) for elem in seq]
     return seq
 
+def my_anonymize(token, dct, mode="order"):
+    """
+    Anonymizes out-of-vocabulary tokens
+    code_tokens: list of strings
+    dct: dictionary of tokens (must support in operation: token in dct)
+    mode: "order": a, b, b, b, c, c -> var1, var2, var2, var2, var3, var3
+          "freq": a, b, b, b, c, c -> var3, var1, var1, var1, var2, var2
+    """
+    word2num = {}
+    freqs = {}
+    for token in code_tokens:
+         if not token in dct:
+            if mode == "order":
+                if not token in word2num:
+                    word2num[token] = len(word2num)
+            else:
+                if not token in freqs:
+                    freqs[token] = 0
+                freqs[token] += 1
+    if mode == "freq":
+        word2num = {w:n for n, (w, _) in enumerate(\
+                           sorted(freqs.items(), key=lambda x:x[1], \
+                           reverse=True))}
+    new_tokens = []
+    for token in code_tokens:
+        if not token in dct:
+            new_tokens.append("<var%d>"%word2num[token])
+        else:
+            new_tokens.append(token)
+    return new_tokens
+
 def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, scope=None):                     #!!!!!
     """Vectorize a single example."""
     src_dict = model.src_dict
@@ -60,6 +91,7 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
         new_target_fixes = []
         new_scope = []
         new_tokens = []
+        anon_tokens = dict()
         for i in range(len(code.tokens)):
             token = code.tokens[i]
             temp_structure = src_dict.encode(token)
@@ -68,31 +100,38 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
             else:
                 new_token = temp_structure.tokens
 #             new_token = src_dict.tokenize(token)
+
             new_size = len(new_token)
             if len(new_tokens) + new_size > model.args.max_tokenized_len:
                 break
+            if model.args.anonymize is not None and new_size > 4:
+                if token not in anon_tokens:
+                    anon_tokens[token] = len(anon_tokens)
+                temp_structure = src_dict.encode("<var%d>"%anon_tokens[token])
+                new_token = temp_structure.tokens
+                new_size = len(new_token)
             new_tokens += new_token
 
-        
-            if (i == target_pos):
-                new_target_pos += [1] * new_size
-            else:
-                new_target_pos += [0] * new_size
-                
-            if (i == target_bug):
-                new_target_bug += [1] * new_size
-            else:
-                new_target_bug += [0] * new_size
-                
-            if (i in target_fixes):
-                new_target_fixes += [1] * new_size
-            else:
-                new_target_fixes += [0] * new_size
-                
-            if (i in scope):
-                new_scope += [1] * new_size
-            else:
-                new_scope += [0] * new_size
+            if model.args.task_name == "vm":
+                if (i == target_pos):
+                    new_target_pos += [1] * new_size
+                else:
+                    new_target_pos += [0] * new_size
+
+                if (i == target_bug):
+                    new_target_bug += [1] * new_size
+                else:
+                    new_target_bug += [0] * new_size
+
+                if (i in target_fixes):
+                    new_target_fixes += [1] * new_size
+                else:
+                    new_target_fixes += [0] * new_size
+
+                if (i in scope):
+                    new_scope += [1] * new_size
+                else:
+                    new_scope += [0] * new_size
                 
             vectorized_ex['code_tokens'] += new_token
 #             code_vectorized += next(src_dict.transform([token]))
@@ -175,6 +214,24 @@ def vectorize(ex, model, target_pos=None, target_bug=None, target_fixes=None, sc
     vectorized_ex['target'] = None
 
     if summary is not None:
+#         if model.args.use_bpe or model.args.use_ulm:
+#             vectorized_ex['summ'] = summary.text
+#             vectorized_ex['summ_tokens'] = []
+#             vectorized_ex['stype'] = []
+#             vectorized_ex['summ_word_rep'] = []
+#             vectorized_ex['target'] = []
+#             for i in range(len(summary.tokens)):
+#                 token = summary.tokens[i]
+#                 temp_structure = tgt_dict.encode(token)
+#                 new_token = temp_structure.tokens
+#                 new_size = len(new_token)
+#                 vectorized_ex['summ_tokens'] += new_token
+# #                 vectorized_ex['stype'] += [summary.type[i]] * new_size
+#                 vectorized_ex['summ_word_rep'] += temp_structure.ids
+#                 vectorized_ex['target'] += temp_structure.ids
+#             vectorized_ex['target'] = torch.LongTensor(vectorized_ex['target'])
+#             vectorized_ex['summ_word_rep'] = torch.LongTensor(vectorized_ex['summ_word_rep'])
+#         else:    
         vectorized_ex['summ'] = summary.text
         vectorized_ex['summ_tokens'] = summary.tokens
         vectorized_ex['stype'] = summary.type
