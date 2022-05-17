@@ -181,7 +181,7 @@ class VarmisuseDataset(Dataset):
             # to variable names
             # if len(ex_obj["code"].type2):
             #    ex_obj["code"].type2[target_pos] = ex_obj["code"].type2[target_bug]
-        if self.args.anonymize is not None:
+        if self.args.anonymize is not None and not self.args.use_bpe:
             # order- or freq-based anonymization should be performed 
             # after injecting bug
             # random-based anonymization could be done beforehands
