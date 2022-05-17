@@ -32,6 +32,13 @@ from trlib.eval.meteor import Meteor
 
 import data_utils
 
+from bpe import Encoder
+from tokenizers import Tokenizer, Regex
+from tokenizers.models import BPE, Unigram
+from tokenizers.trainers import BpeTrainer, UnigramTrainer
+import tokenizers.pre_tokenizers as pretoken
+import re
+
 def str2bool(v):
     return v.lower() in ('yes', 'true', 't', '1', 'y')
 
@@ -107,6 +114,14 @@ def add_train_args(parser):
                             help='Maximum allowed length for src dictionary')
     preprocess.add_argument('--tgt_vocab_size', type=int, default=30000,
                             help='Maximum allowed length for tgt dictionary')
+    preprocess.add_argument('--max_tokenized_len', type=int, default=500,
+                            help='Maximum allowed length for tokenized sentence')
+    preprocess.add_argument('--anonymize', type=str, default=None,
+                      help='If not None, rare tokens will be anonymized. Options: "freq" or "order"')
+    preprocess.add_argument('--pre_tokenizers', type=str, default="whitespace",
+                      help='which pre_tokenizer will be used before tokenizetions')
+    preprocess.add_argument('--task_name', type=str, default="fn",
+                  help='task name')
 
     # General
     general = parser.add_argument_group('General')
@@ -120,6 +135,10 @@ def add_train_args(parser):
                          help='Only do testing')
     general.add_argument('--use_tqdm', type='bool', default=False,
                          help='Enable fancy training epoch progress printing (useful if you run training in interactive mode, anti-useful if your system saves error log into file')
+    general.add_argument('--use_bpe', type='bool', default=False,
+                         help='Use byte pair encoding')
+    general.add_argument('--use_ulm', type='bool', default=False,
+                         help='Use unigram language model')
 
     # Log results Learning
     log = parser.add_argument_group('Log arguments')
@@ -242,27 +261,84 @@ def init_from_scratch(args, logger):
     # Build a dictionary from the data questions + words (train/dev splits)
     logger.print('-' * 100)
     logger.print('Build word dictionary')
-    if not args.share_decoder_encoder_embeddings:
-        src_dict = util.build_word_and_char_dict_from_file(\
-                                     filenames=[args.train_src_file],
-                                     dict_size=args.src_vocab_size,
-                                     special_tokens="pad_unk",\
-                                     sum_over_subtokens = \
-                                     args.sum_over_subtokens)
-        tgt_dict = util.build_word_and_char_dict_from_file(\
-                                     filenames=[args.train_tgt_file],
-                                     dict_size=args.tgt_vocab_size,
-                                     special_tokens="pad_unk_bos_eos",\
-                                             sum_over_subtokens = False)
-    else:
-        src_dict = util.build_word_and_char_dict_from_file(\
-                                     filenames=[args.train_src_file,\
-                                                args.train_tgt_file],\
-                                     dict_size=args.src_vocab_size,
-                                     special_tokens="pad_unk_bos_eos",\
-                                     sum_over_subtokens = \
-                                     args.sum_over_subtokens)
-        tgt_dict = src_dict
+    
+    pre_tokenizer = [pretoken.WhitespaceSplit()]
+    pre_tokenizer_flags = args.pre_tokenizers.split("_")
+    if "dots" in pre_tokenizer_flags:
+        pre_tokenizer.append(pretoken.Split(".", "merged_with_previous"))
+    if "snake" in pre_tokenizer_flags:
+        pre_tokenizer.append(pretoken.Split("_", "merged_with_previous"))
+    if "camel" in pre_tokenizer_flags:
+        pre_tokenizer.append(pretoken.Split(Regex(".+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)"), "merged_with_previous"))
+    pre_tokenizer = pretoken.Sequence(pre_tokenizer)     
+    
+    if args.use_bpe:                                                                      #!!!!
+        if not args.share_decoder_encoder_embeddings:
+            src_dict = Tokenizer(BPE())
+            src_dict.pre_tokenizer = pre_tokenizer
+            trainer = BpeTrainer(vocab_size=args.src_vocab_size, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
+            src_dict.train(files=[args.train_src_file], trainer=trainer)
+            
+#             tgt_dict = Tokenizer(BPE(end_of_word_suffix="/w"))
+#             tgt_dict.pre_tokenizer = pre_tokenizer
+#             trainer = BpeTrainer(vocab_size=args.tgt_vocab_size, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "[BOS]", "[EOS]"], end_of_word_suffix="/w")
+#             tgt_dict.train(files=[args.train_tgt_file], trainer=trainer)
+            tgt_dict = util.build_word_and_char_dict_from_file(\
+                                         filenames=[args.train_tgt_file],
+                                         dict_size=args.tgt_vocab_size,
+                                         special_tokens="pad_unk_bos_eos",\
+                                                 sum_over_subtokens = False)
+        else:
+            src_dict = Tokenizer(BPE())
+            src_dict.pre_tokenizer = pre_tokenizer
+            trainer = BpeTrainer(vocab_size=args.src_vocab_size, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "[BOS]", "[EOS]"])
+            src_dict.train(files=[args.train_src_file, args.train_tgt_file], trainer=trainer)
+            tgt_dict = src_dict
+            
+    elif args.use_ulm:                                                                      #!!!!
+        if not args.share_decoder_encoder_embeddings:
+            src_dict = Tokenizer(Unigram())
+            src_dict.pre_tokenizer = pre_tokenizer
+            trainer = UnigramTrainer(vocab_size=args.src_vocab_size, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
+            src_dict.train(files=[args.train_src_file], trainer=trainer)
+            
+#             tgt_dict = Tokenizer(Unigram())
+#             tgt_dict.pre_tokenizer = pre_tokenizer
+#             trainer = UnigramTrainer(vocab_size=args.tgt_vocab_size, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "[BOS]", "[EOS]"])
+#             tgt_dict.train(files=[args.train_tgt_file], trainer=trainer)
+            tgt_dict = util.build_word_and_char_dict_from_file(\
+                                         filenames=[args.train_tgt_file],
+                                         dict_size=args.tgt_vocab_size,
+                                         special_tokens="pad_unk_bos_eos",\
+                                                 sum_over_subtokens = False)
+        else:
+            src_dict = Tokenizer(Unigram())
+            src_dict.pre_tokenizer = pre_tokenizer
+            trainer = UnigramTrainer(vocab_size=args.src_vocab_size, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "[BOS]", "[EOS]"])
+            src_dict.train(files=[args.train_src_file, args.train_tgt_file], trainer=trainer)
+            tgt_dict = src_dict            
+    else:    
+        if not args.share_decoder_encoder_embeddings:
+            src_dict = util.build_word_and_char_dict_from_file(\
+                                         filenames=[args.train_src_file],
+                                         dict_size=args.src_vocab_size,
+                                         special_tokens="pad_unk",\
+                                         sum_over_subtokens = \
+                                         args.sum_over_subtokens)
+            tgt_dict = util.build_word_and_char_dict_from_file(\
+                                         filenames=[args.train_tgt_file],
+                                         dict_size=args.tgt_vocab_size,
+                                         special_tokens="pad_unk_bos_eos",\
+                                                 sum_over_subtokens = False)
+        else:
+            src_dict = util.build_word_and_char_dict_from_file(\
+                                         filenames=[args.train_src_file,\
+                                                    args.train_tgt_file],\
+                                         dict_size=args.src_vocab_size,
+                                         special_tokens="pad_unk_bos_eos",\
+                                         sum_over_subtokens = \
+                                         args.sum_over_subtokens)
+            tgt_dict = src_dict
     if args.use_tree_relative_attn:
         if args.rel_dict_filename is not None:
             rel_dict = util.load_word_and_char_dict(args, args.rel_dict_filename, \
@@ -286,8 +362,10 @@ def init_from_scratch(args, logger):
     else:
         type_dict = None
     
-        
-    logger.print('Num words in source = %d and target = %d' % (len(src_dict), len(tgt_dict)))
+    if args.use_bpe or args.use_ulm:
+        logger.print('Num words in source = %d and target = %d' % (src_dict.get_vocab_size(), len(tgt_dict))) #tgt_dict.get_vocab_size()))
+    else:   
+        logger.print('Num words in source = %d and target = %d' % (len(src_dict), len(tgt_dict)))
     if args.use_tree_relative_attn:
         logger.print("Num relations in relative matrix = %d" % (len(rel_dict)))
 
