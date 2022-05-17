@@ -43,7 +43,9 @@ MODEL_ARCHITECTURE = {
     "ggnn_first",
     "max_tokenized_len",
     "use_bpe",
-    "use_ulm"
+    "use_ulm",
+    "anonymize",
+    "task_name"
 }
 
 SEQ2SEQ_ARCHITECTURE = {
@@ -77,7 +79,7 @@ DATA_OPTIONS = {
     'uncase',
     'max_characters_per_token',
     'dataset_weights',
-    'pre_tokenizer'
+    'pre_tokenizers'
 }
 
 # Index of arguments concerning the model optimizer/training
