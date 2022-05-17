@@ -15,6 +15,13 @@ from trlib.utils.copy_utils import collapse_copy_scores, replace_unknown, \
     make_src_map, align
 from trlib.utils.misc import tens2sen, count_file_lines
 
+class new_tokenzer():
+    def __init__(self, tok):
+        self.tok = tok
+    def __getitem__(self, idx):
+        return self.tok.encode(idx).ids
+    def __len__(self):
+        return self.tok.get_vocab_size()    
 
 class Code2NaturalLanguage(object):
     """High level model that handles intializing the underlying network
@@ -29,9 +36,20 @@ class Code2NaturalLanguage(object):
         # Book-keeping.
         self.args = args
         self.src_dict = src_dict
-        self.args.src_vocab_size = len(src_dict)
+        
+        if args.use_bpe or args.use_ulm:
+            self.args.src_vocab_size = src_dict.get_vocab_size()
+        else:
+            self.args.src_vocab_size = len(src_dict)
+            
         self.tgt_dict = tgt_dict
-        self.args.tgt_vocab_size = len(tgt_dict)
+        
+        if args.use_bpe or args.use_ulm:
+#             self.args.tgt_vocab_size = tgt_dict.get_vocab_size()
+            self.args.tgt_vocab_size = len(tgt_dict)
+        else:
+            self.args.tgt_vocab_size = len(tgt_dict)
+            
         self.rel_dict = rel_dict
         if rel_dict is not None:
             self.args.tree_rel_vocab_size = len(rel_dict)
@@ -46,12 +64,14 @@ class Code2NaturalLanguage(object):
         self.updates = 0
         self.use_cuda = False
         self.parallel = False
+        self.use_bpe = args.use_bpe                                                          #!!!
+        self.use_ulm = args.use_ulm
 
-        if len(tgt_dict):
+        if self.args.tgt_vocab_size:
             if args.model_type == 'rnn':
-                self.network = Seq2seq(self.args, tgt_dict)
+                self.network = Seq2seq(self.args, tgt_dict)                #!!!!
             elif args.model_type == 'transformer':
-                self.network = Transformer(self.args, tgt_dict)
+                self.network = Transformer(self.args, tgt_dict)            #!!!!
             else:
                 raise RuntimeError('Unsupported model: %s' % args.model_type)
 
@@ -270,7 +290,14 @@ class Code2NaturalLanguage(object):
                 code_root_paths_rep = code_root_paths_rep.cuda(non_blocking=True)
             if code_adj_matrix_rep is not None:
                 code_adj_matrix_rep = code_adj_matrix_rep.cuda(non_blocking=True)
-
+        
+        if self.use_bpe or self.use_ulm:
+            src_dict = new_tokenzer(self.src_dict)
+#             tgt_dict = new_tokenzer(self.tgt_dict)
+            tgt_dict = self.tgt_dict
+        else:
+            src_dict = self.src_dict
+            tgt_dict = self.tgt_dict            
         decoder_out = self.network(code_word_rep=code_word_rep,
                                    code_char_rep=code_char_rep,
                                    code_type_rep=code_type_rep,
@@ -286,12 +313,21 @@ class Code2NaturalLanguage(object):
                                    src_map=source_map,
                                    alignment=alignment,
                                    max_len=self.args.max_tgt_len,
-                                   src_dict=self.src_dict,
-                                   tgt_dict=self.tgt_dict,
+                                   src_dict=src_dict,
+                                   tgt_dict=tgt_dict,
                                    blank=blank, fill=fill,
                                    source_vocab=ex['src_vocab'],
                                    code_mask_rep=code_mask_rep)
-
+#         if self.use_bpe or self.use_ulm:
+#             predictions = self.tgt_dict.decode_batch(decoder_out['predictions'])
+#             for i in range(len(predictions)):
+#                 ans = []
+#                 for word in predictions[i].split("/w"):
+#                     if word == "":
+#                         continue
+#                     ans += [''.join(word.split())]
+#                 predictions[i] = " ".join(ans)
+#         else:
         predictions = tens2sen(decoder_out['predictions'],
                                self.tgt_dict,
                                ex['src_vocab'])
