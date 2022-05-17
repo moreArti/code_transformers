@@ -125,8 +125,10 @@ def add_train_args(parser):
                             help='Maximum allowed length for tokenized sentence')
     preprocess.add_argument('--anonymize', type=str, default=None,
                       help='If not None, rare tokens will be anonymized. Options: "freq" or "order"')
-    preprocess.add_argument('--pre_tokenizer', type=str, default="whitespace",
+    preprocess.add_argument('--pre_tokenizers', type=str, default="whitespace",
                       help='which pre_tokenizer will be used before tokenizetions')
+    preprocess.add_argument('--task_name', type=str, default="vm",
+                  help='task name')
 
     # General
     general = parser.add_argument_group('General')
@@ -284,7 +286,7 @@ def init_from_scratch(args, logger):
     if "snake" in pre_tokenizer_flags:
         pre_tokenizer.append(pretoken.Split("_", "merged_with_previous"))
     if "camel" in pre_tokenizer_flags:
-        pre_tokenizer.append(pretoken.Split(tokenizers.Regex(".+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)"), "merged_with_previous"))
+        pre_tokenizer.append(pretoken.Split(Regex(".+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)"), "merged_with_previous"))
     pre_tokenizer = pretoken.Sequence(pre_tokenizer)     
     
     if args.use_bpe:                                                                      #!!!!
@@ -296,7 +298,7 @@ def init_from_scratch(args, logger):
             src_dict.pre_tokenizer = pre_tokenizer
             trainer = BpeTrainer(vocab_size=args.src_vocab_size, special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
             src_dict.train(files=[args.train_src_file], trainer=trainer)
-            src_dict.save(f'vocabularies/bpe_{args.src_vocab_size}_{args.dataset_name}.json')
+            src_dict.save(f'vocabularies/bpe_{args.pre_tokenizers}_{args.src_vocab_size}_{args.dataset_name}.json')
     elif args.use_ulm:                                                                      #!!!!
         if args.src_dict_filename is not None:
             logger.print("Loading dict. from "+ args.src_dict_filename)
@@ -321,8 +323,12 @@ def init_from_scratch(args, logger):
                                      sum_over_subtokens = \
                                      args.sum_over_subtokens)
     if args.anonymize:
-        for w in range(args.max_src_len):
-            src_dict.add("<var%d>"%w)
+        if args.use_bpe:
+            for w in range(args.max_src_len):
+                src_dict.add_tokens(["<var%d>"%w])            
+        else:
+            for w in range(args.max_src_len):
+                src_dict.add("<var%d>"%w)
     
     if args.use_tree_relative_attn:
         if args.rel_dict_filename is not None:
